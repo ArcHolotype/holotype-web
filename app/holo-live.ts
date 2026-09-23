@@ -17,12 +17,20 @@ export type HoloBudget = {
   spent_today_usd: number | null;
   remaining_today_usd: number | null;
 };
+export type HoloMarket = {
+  temperature: number | null;
+  regime: string | null;
+  volume_usd: number | null;
+  trades: number | null;
+  source: string | null;
+};
 export type HoloLive = {
   status: "idle" | "live" | "error";
   brainOnline: boolean;
   wallet: HoloWallet | null;
   spend: HoloSpend | null;
   budget: HoloBudget | null;
+  market: HoloMarket | null;
   entries: HoloLiveEntry[];
   generatedAt: string | null;
 };
@@ -35,6 +43,7 @@ const IDLE: HoloLive = {
   wallet: null,
   spend: null,
   budget: null,
+  market: null,
   entries: [],
   generatedAt: null,
 };
@@ -64,11 +73,19 @@ export function useHoloLive(enabled = true): HoloLive {
             spent_today_usd?: number | null;
             remaining_today_usd?: number | null;
           } | null;
+          market?: {
+            temperature?: number | null;
+            regime?: string | null;
+            volume_usd?: number | null;
+            trades?: number | null;
+            source?: string | null;
+          } | null;
           generated_at?: string | null;
         };
         if (!alive) return;
         const entries = Array.isArray(data?.entries) ? data.entries : [];
         const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+        const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
         setState({
           status: "live",
           brainOnline: Boolean(data?.brain?.online),
@@ -83,6 +100,16 @@ export function useHoloLive(enabled = true): HoloLive {
                   cap_usd: num(data.budget.cap_usd),
                   spent_today_usd: num(data.budget.spent_today_usd),
                   remaining_today_usd: num(data.budget.remaining_today_usd),
+                }
+              : null,
+          market:
+            data?.market && typeof data.market === "object"
+              ? {
+                  temperature: num(data.market.temperature),
+                  regime: str(data.market.regime),
+                  volume_usd: num(data.market.volume_usd),
+                  trades: num(data.market.trades),
+                  source: str(data.market.source),
                 }
               : null,
           entries,

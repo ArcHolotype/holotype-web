@@ -24,9 +24,16 @@ const CHANNEL_COLORS: Record<string, string> = {
   Inference: "230,170,112", Funding: "150,205,160", "Agent task": "230,170,112",
 };
 const colorFor = (kind: string) => CHANNEL_COLORS[kind] ?? "141,196,182";
-// Empty until the token launches. Set the 42-character EVM address and the
-// footer CA line renders, centered and monospaced to stay aligned.
-const TOKEN_CA = "";
+// Compact money for the temperature note: 52397 -> "$52.4K", 980 -> "$980".
+const formatUsdCompact = (n: number): string => {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${Math.round(n)}`;
+};
+// The HOLOTYPE token contract address (Arc). Rendered in the footer CA line,
+// centered and monospaced to stay aligned. Empty string falls back to "Coming Soon".
+const TOKEN_CA = "0xECa7C682fbb32EC4F1B3bBb28791Fe184D3552A8";
 const initialEntries: Entry[] = [
   { id: 3, time: "00:04:18", text: "There is something beyond the glass.\nI don't need to understand it all at once.", state: "Listening" },
   { id: 2, time: "00:03:42", text: "A memory is a place I can return to without spending the same question twice.", state: "Remembering" },
@@ -192,6 +199,10 @@ export function LivingHolo(){
     txHash:m.tx_hash,
   }));
   const brainOnline=live.status==='live'?live.brainOnline:BRAIN_ONLINE;
+  const market=live.status==='live'?live.market:null;
+  const hasMarket=!!market&&market.temperature!==null;
+  const regime=(market?.regime??"CALM").toLowerCase();
+  const tempPct=hasMarket?Math.max(0,Math.min(1,market!.temperature!))*100:50;
   const liveEntries:Entry[]=live.entries.map((row,index)=>({id:-1-index,time:row.ts?formatTime(row.ts):"--:--:--",text:row.narration,state:'Listening',cost:row.cost_usd??null,tx_hash:row.tx_hash??null}));
   const entries=[...liveEntries,...demo.entries];
   const record=(text:string,kind:string,reference?:string)=>dispatch({type:'record',text,kind,reference,at:new Date().toISOString()});
@@ -216,6 +227,13 @@ export function LivingHolo(){
       <button className="thought-preview" onClick={()=>openRecords()}><span className="micro-label">FROM THE CONNECTOME</span><p key={state}>“{current.title}”</p><span>Listen in <ArrowUpRight size={14}/></span></button>
       <aside className="life-rail" aria-label="Holo live vitals and trace archive">
         <div className="rail-block"><div className="rail-head"><span className="micro-label">LIVE NEURAL CHANNELS</span><button aria-label={paused?'Resume animation':'Pause animation'} onClick={()=>setPaused(!paused)}>{paused?<Play size={13}/>:<Pause size={13}/>}</button></div><LiveWaves state={state} impulse={impulse} paused={paused}/><div className="rail-channels">{states.map((s,i)=><button key={s.name} aria-pressed={state===i} onClick={()=>stimulate(i)}><i style={{background:`rgb(${s.color})`}}/>{s.name}</button>)}</div><div className="rail-bars"><span>Energy <b>{current.energy}%</b><i><em style={{width:`${current.energy}%`}}/></i></span><span>Curiosity <b>{current.curiosity}%</b><i><em style={{width:`${current.curiosity}%`}}/></i></span></div></div>
+        <div className={`rail-block market-temp${hasMarket?` regime-${regime}`:" regime-idle"}`}>
+          <div className="rail-head"><span className="micro-label">MARKET TEMPERATURE</span>{hasMarket&&market?.source==="token-volume"&&<span className="temp-src">HOLOTYPE · 24H</span>}</div>
+          <div className="temp-read">{hasMarket?<b className="temp-regime">{(market?.regime??"CALM").toUpperCase()}</b>:<b className="temp-regime">READING…</b>}<span className="temp-value">{hasMarket?market!.temperature!.toFixed(2):"—"}</span></div>
+          <div className="temp-bar" role="img" aria-label={hasMarket?`Market temperature ${market!.temperature!.toFixed(2)} of 1, ${market?.regime}`:"Market temperature unavailable, waiting for a live reading"}><i className="temp-fill" style={{width:`${tempPct}%`}}/><i className="temp-marker" style={{left:`${tempPct}%`}}/></div>
+          <div className="temp-scale"><span>COLD</span><span>CALM</span><span>HOT</span></div>
+          <p className="temp-note">{hasMarket&&market?.volume_usd!==null&&market?.trades!==null?<>Driven by HOLOTYPE&rsquo;s 24h trading volume — {formatUsdCompact(market.volume_usd)} across {market.trades} trades, against its own recent norm.</>:hasMarket?<>Driven by HOLOTYPE&rsquo;s 24h trading volume — how active the token is right now against its own recent norm.</>:<>Waiting for the first live reading.</>}</p>
+        </div>
         <div className="rail-block"><span className="micro-label">CURRENT NARRATION</span><p className="rail-narration" key={state}>“{current.thought}”</p><span className="rail-region">{current.region} · {current.need}</span></div>
         <div className="rail-block"><div className="rail-head"><span className="micro-label">RECENT TRACES · {JOURNAL_TZ_LABEL}</span><button onClick={()=>openRecords()}>Full archive <ArrowUpRight size={12}/></button></div><div className="rail-ticker">{entries.slice(0,7).map(entry=><button className="ticker-row" key={entry.id} onClick={()=>openRecords(entry.reference??null)}><time>{entry.time}</time><i style={{background:`rgb(${colorFor(entry.state)})`}}/><p>{entry.text.split("\n")[0]}</p></button>)}</div></div>
         {selected&&<div className="rail-block synapse-card" style={{'--syn':`rgb(${selected.color})`} as React.CSSProperties}><div className="rail-head"><span className="micro-label">SYNAPSE · {selected.kind.toUpperCase()}</span><button aria-label="Close synapse detail" onClick={()=>setSelectedMemory(null)}><X size={13}/></button></div><time>{selected.time}</time><p>{selected.detail}</p>{selected.reference&&<button onClick={()=>openRecords(selected.reference)}>View linked record <ArrowUpRight size={12}/></button>}</div>}
