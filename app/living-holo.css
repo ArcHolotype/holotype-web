@@ -134,6 +134,9 @@
 .with-rail .memory-label{right:37%;top:74%}
 .with-rail .thought-preview{left:44px;right:auto;bottom:58px;width:288px;z-index:3}
 .thought-preview .micro-label{letter-spacing:.15em}
+/* Keep the teaser at its original compact footprint: clamp long real narrations to two
+   lines with an ellipsis instead of letting them grow over the neural field. */
+.thought-preview p{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 @media(max-width:900px){
   .with-rail .holo-caption{left:24px;right:24px;width:auto;top:74px}
   .with-rail .organism-canvas{top:186px;height:430px}

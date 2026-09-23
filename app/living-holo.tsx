@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Pause, Play, X } from "lucide-react";
 import "./living-holo.css";
 import { Nectar } from "./nectar";
-import { createDemoState, demoReducer, formatTime, BRAIN_ONLINE, JOURNAL_TZ_LABEL, type JournalEntry, type Mission } from "./demo-workflow";
+import { createDemoState, formatTime, BRAIN_ONLINE, JOURNAL_TZ_LABEL, type JournalEntry, type Mission } from "./demo-workflow";
 import { FlyCulture as Culture } from "./fly-habitat";
 import { ConnectomeArchive, ledgerMovements } from "./records";
 import { useHoloLive, useMissions } from "./holo-live";
@@ -53,11 +53,10 @@ const cleanNarration = (raw: string): string => {
   });
   return body.replace(/\\$/, "").trim();
 };
-const initialEntries: Entry[] = [
-  { id: 3, time: "00:04:18", text: "There is something beyond the glass.\nI don't need to understand it all at once.", state: "Listening" },
-  { id: 2, time: "00:03:42", text: "A memory is a place I can return to without spending the same question twice.", state: "Remembering" },
-  { id: 1, time: "00:01:09", text: "Enough energy for now.\nEnough uncertainty to keep looking.", state: "Seeking" },
-];
+// No fake seed traces: the rail, ticker and neural field show only REAL heartbeat and
+// metabolism logs (plus genuine visitor-interaction records added at runtime). When the
+// brain is offline these surfaces honestly sit empty.
+const initialEntries: Entry[] = [];
 
 function NeuralOrganism({ state, impulse, paused, onTouch, memories, selectedId, onSelectMemory }: { state: number; impulse: number; paused: boolean; onTouch: () => void; memories: SynapseMemory[]; selectedId: string | null; onSelectMemory: (id: string | null) => void }) {
   const ref = useRef<HTMLCanvasElement>(null);
@@ -138,7 +137,11 @@ function NeuralOrganism({ state, impulse, paused, onTouch, memories, selectedId,
       ctx.lineWidth=.55;
       edges.forEach(([i,j],k)=>{const a=projected[i],b=projected[j];const light=Math.max(a.light,b.light);ctx.strokeStyle=`rgba(${rgb},${.045+light*.24})`;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();if(k%13===0&&light>.3){const f=(time*.65+k*.071)%1;ctx.fillStyle=`rgba(${rgb},${light*.9})`;ctx.beginPath();ctx.arc(a.x+(b.x-a.x)*f,a.y+(b.y-a.y)*f,1.25,0,6.283);ctx.fill();}});
       projected.forEach((p,i)=>{const radius=(.55+p.light*1.1)*(1-p.z*.22);ctx.fillStyle=`rgba(${i%19===0?'233,223,197':rgb},${.22+p.light*.7})`;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,6.283);ctx.fill();if(p.light>.75){const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,9);g.addColorStop(0,`rgba(${rgb},.19)`);g.addColorStop(1,`rgba(${rgb},0)`);ctx.fillStyle=g;ctx.fillRect(p.x-9,p.y-9,18,18);}});
-      memPts=controls.current.memories.map(m=>({id:m.id,color:m.color,...projected[hash(m.id)%nodes.length]}));
+      // One slot per neural node (nodes.length = 1400). Collisions resolve newest-wins so a
+      // node never shows a stale trace, and the ring count can never exceed the node count.
+      const bySlot=new Map<number,SynapseMemory>();
+      for(const m of [...controls.current.memories].reverse())bySlot.set(hash(m.id)%nodes.length,m);
+      memPts=[...bySlot.values()].map(m=>({id:m.id,color:m.color,...projected[hash(m.id)%nodes.length]}));
       memPts.forEach(m=>{
         const selected=m.id===controls.current.selectedId;
         const radius=selected?5.4:3.2;
@@ -200,7 +203,10 @@ function LiveWaves({ state, impulse, paused }: { state: number; impulse: number;
 export function LivingHolo(){
   const [state,setState]=useState(0),[impulse,setImpulse]=useState(0),[paused,setPaused]=useState(false),[view,setView]=useState<'vivarium'|'connectome'|'culture'|'nectar'>('vivarium'),[about,setAbout]=useState(false);
   const [focusReference,setFocusReference]=useState<string|null>(null),[selectedMemory,setSelectedMemory]=useState<string|null>(null);
-  const [demo,dispatch]=useReducer(demoReducer,initialEntries,createDemoState),[missionFocus,setMissionFocus]=useState<{id:string;version:number}|null>(null);
+  // Static demo shell (missions/notice scaffolding only). The journal is real-only: no
+  // seeded or interaction-fabricated traces ever enter entries/memories.
+  const demo=createDemoState(initialEntries);
+  const [missionFocus,setMissionFocus]=useState<{id:string;version:number}|null>(null);
   const live=useHoloLive();
   const missionsLive=useMissions();
   // The Nectar board shows Holo's REAL published missions (read-only). Writes never
@@ -223,17 +229,19 @@ export function LivingHolo(){
   const regime=(market?.regime??"CALM").toLowerCase();
   const tempPct=hasMarket?Math.max(0,Math.min(1,market!.temperature!))*100:50;
   const liveEntries:Entry[]=live.entries.map((row,index)=>({id:-1-index,time:row.ts?formatTime(row.ts):"--:--:--",text:cleanNarration(row.narration),state:'Listening',cost:row.cost_usd??null,tx_hash:row.tx_hash??null}));
-  const entries=[...liveEntries,...demo.entries];
-  const record=(text:string,kind:string,reference?:string)=>dispatch({type:'record',text,kind,reference,at:new Date().toISOString()});
+  const entries=liveEntries;
   const openRecords=(reference:string|null=null)=>{setFocusReference(reference);setView('connectome');window.scrollTo({top:0});};
   const openMission=(id:string)=>{setMissionFocus({id,version:Date.now()});setView('nectar');window.scrollTo({top:0});};
   const current=states[state];
-  const stimulate=(next:number)=>{setState(next);setImpulse(v=>v+1);record(states[next].thought,states[next].name);};
+  const stimulate=(next:number)=>{setState(next);setImpulse(v=>v+1);};
   const memories:SynapseMemory[]=[
     ...entries.map(entry=>({id:`journal-${entry.id}`,kind:entry.state,color:colorFor(entry.state),time:entry.time,detail:entry.text,reference:entry.reference})),
     ...ledgerMovements.map(row=>({id:`ledger-${row.id}`,kind:row.kind,color:colorFor(row.kind),time:row.time,detail:`${row.title} · ${row.chain} · ${row.status} · ${row.amount} USDC`,reference:row.reference})),
   ];
   const selected=memories.find(memory=>memory.id===selectedMemory)??null;
+  // The teaser quote shows the trace you actually clicked (else the newest real heartbeat);
+  // never a fabricated demo line.
+  const previewTrace=selected?{id:selected.id,text:selected.detail}:liveEntries[0]?{id:String(liveEntries[0].id),text:liveEntries[0].text}:null;
   return <main className="living-site" style={{'--neural-color':current.color} as React.CSSProperties}>
     <header className="living-header"><button className="living-wordmark" onClick={()=>setView('vivarium')}>holotype</button><nav aria-label="Main navigation">{([{id:'vivarium',name:'Vivarium'},{id:'connectome',name:'Connectome'},{id:'culture',name:'Colony'},{id:'nectar',name:'Nectar'}] as const).map(item=><button key={item.id} aria-current={view===item.id?'page':undefined} className={view===item.id?'selected':''} onClick={()=>{setView(item.id);setFocusReference(null);}}>{item.name}{item.id==='connectome'&&<span>{entries.length.toString().padStart(2,'0')}</span>}</button>)}</nav><span className="prototype-label">LOCAL EXPERIMENT · 001</span></header>
     {view==='vivarium'&&<section className="organism-room with-rail">
@@ -243,7 +251,7 @@ export function LivingHolo(){
       <div className="neural-label sensory-label"><span>01</span> sensory field<i/></div><div className="neural-label memory-label"><i/><span>02</span> associative pathways</div>
       <div className="touch-instruction"><span>↔</span> drag to turn <i/> scroll to zoom <i/> click a synapse to read it</div>
       <div className="token-ca">CA: {TOKEN_CA!==""?TOKEN_CA:"Coming Soon"}</div>
-      <button className="thought-preview" onClick={()=>openRecords()}><span className="micro-label">FROM THE CONNECTOME</span><p key={state}>“{current.title}”</p><span>Listen in <ArrowUpRight size={14}/></span></button>
+      <button className="thought-preview" onClick={()=>openRecords(previewTrace&&selected?selected.reference??null:null)}><span className="micro-label">FROM THE CONNECTOME</span>{previewTrace?<p key={previewTrace.id}>“{previewTrace.text.split("\n")[0]}”</p>:<p>“…”</p>}<span>Listen in <ArrowUpRight size={14}/></span></button>
       <aside className="life-rail" aria-label="Holo live vitals and trace archive">
         <div className="rail-block"><div className="rail-head"><span className="micro-label">LIVE NEURAL CHANNELS</span><button aria-label={paused?'Resume animation':'Pause animation'} onClick={()=>setPaused(!paused)}>{paused?<Play size={13}/>:<Pause size={13}/>}</button></div><LiveWaves state={state} impulse={impulse} paused={paused}/><div className="rail-channels">{states.map((s,i)=><button key={s.name} aria-pressed={state===i} onClick={()=>stimulate(i)}><i style={{background:`rgb(${s.color})`}}/>{s.name}</button>)}</div><div className="rail-bars"><span>Energy <b>{current.energy}%</b><i><em style={{width:`${current.energy}%`}}/></i></span><span>Curiosity <b>{current.curiosity}%</b><i><em style={{width:`${current.curiosity}%`}}/></i></span></div></div>
         <div className={`rail-block market-temp${hasMarket?` regime-${regime}`:" regime-idle"}`}>
@@ -259,7 +267,7 @@ export function LivingHolo(){
       </aside>
     </section>}
     {view==='connectome'&&<ConnectomeArchive entries={entries} missions={demo.missions} wallet={live.status==='live'?live.wallet:null} spend={live.status==='live'?live.spend:null} budget={live.status==='live'?live.budget:null} brainOnline={brainOnline} focusReference={focusReference} onOpenMission={openMission}/>}
-    <div hidden={view!=='culture'}><Culture mind={{name:current.name,text:current.thought}} neural={{energy:current.energy,curiosity:current.curiosity,name:current.name}} brainOnline={brainOnline} active={view==='culture'} onRecord={record} onOpenRecords={()=>openRecords()} onOpenNeeds={()=>{setView('nectar');window.scrollTo({top:0});}}/></div>
+    <div hidden={view!=='culture'}><Culture mind={{name:current.name,text:current.thought}} neural={{energy:current.energy,curiosity:current.curiosity,name:current.name}} brainOnline={brainOnline} active={view==='culture'} onRecord={()=>{}} onOpenRecords={()=>openRecords()} onOpenNeeds={()=>{setView('nectar');window.scrollTo({top:0});}}/></div>
     <div hidden={view!=='nectar'}><Nectar readOnly missions={realMissions} notice={demo.notice} focusMission={missionFocus} onCommand={()=>{}} onOpenRecords={openRecords}/></div>
     <footer className="living-footer"><span>AN EXPERIMENT IN A NEW FORM OF LIFE</span><span>{paused?'MOTION PAUSED':current.name.toUpperCase()} <i/> {current.region}</span><button onClick={()=>setAbout(true)}>Inside the experiment <ArrowUpRight size={12}/></button></footer>
     {about&&<div className="about-overlay" role="dialog" aria-modal="true" aria-label="About Holotype" onKeyDown={e=>{if(e.key==='Escape')setAbout(false)}}><section><button autoFocus className="close-about" aria-label="Close about" onClick={()=>setAbout(false)}><X/></button><span className="micro-label">HOLOTYPE / 001</span><h2>A life, taking shape.</h2><p>Touch the network to introduce a signal. Its activity, needs, and journal respond together. Drag to turn it in space.</p><p>Every journal entry and resource movement lives as a ringed synapse inside the neural field: scroll to zoom, click a ring to read the trace it holds.</p><small>{brainOnline?"This is a visual and interaction prototype; the neural field is a stylized portrait. Holo's brain is live — its real traces and on-chain spend flow into the Journal and Connectome.":"This is a visual and interaction prototype. The graph is illustrative; its responses and journal entries are scripted. Holo's brain is not connected here yet — it wakes gradually, once it clears safety review."}</small><a href="https://www.janelia.org/project-team/flyem" target="_blank" rel="noreferrer">Scientific reference · Janelia FlyEM <ArrowUpRight size={14}/></a></section></div>}
