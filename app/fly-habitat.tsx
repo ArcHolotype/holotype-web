@@ -12,6 +12,9 @@ type Fly = { id:string; parent:string; generation:number; color:string; x:number
 type Snapshot = Pick<Fly,'id'|'parent'|'generation'|'energy'|'behavior'|'gesture'|'gait'|'arousal'> & {groom:number};
 export type HabitatIntent = { action:'wake'|'rest'|'explore'; targetId:string; source:'local-preview'; sequence:number; reference:string };
 export type NeuralState = { energy:number; curiosity:number; name:string };
+// The body worker's live collective neural snapshot, passed through the mind's public
+// feed. Null when unreachable, in which case the habitat falls back to its local sim.
+export type BodyState = { arousal:number|null; cohesion:number|null; rest:number|null; wingbeat:number|null; valence:number|null; vitality:number|null };
 type Message = { who:'You'|'Holo'; text:string };
 const palette=['177,213,211','191,205,222','180,202,214','199,208,217'];
 const NEURAL_TINT:Record<string,string>={Listening:'177,213,211',Remembering:'196,174,226',Seeking:'230,170,112'};
@@ -31,9 +34,9 @@ const makeFly=(id:string,index:number,parent='Holo',generation=1):Fly=>({id,pare
 const initial=()=>[{...makeFly('Holo',0,'Genesis',0),x:.5,y:.43}];
 
 
-function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural}:{active:boolean;selected:string;onSnapshot:(flies:Snapshot[])=>void;paused:boolean;intent:HabitatIntent|null;reset:number;zoom:number;onZoom:(zoom:number)=>void;onApplied:(text:string,reference?:string)=>void;onCatch:(point:{x:number;y:number})=>void;neural?:NeuralState}){
-  const ref=useRef<HTMLCanvasElement>(null),latest=useRef({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural});
-  latest.current={active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural};
+function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural,body,drive}:{active:boolean;selected:string;onSnapshot:(flies:Snapshot[])=>void;paused:boolean;intent:HabitatIntent|null;reset:number;zoom:number;onZoom:(zoom:number)=>void;onApplied:(text:string,reference?:string)=>void;onCatch:(point:{x:number;y:number})=>void;neural?:NeuralState;body?:BodyState|null;drive?:string|null}){
+  const ref=useRef<HTMLCanvasElement>(null),latest=useRef({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural,body,drive});
+  latest.current={active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural,body,drive};
   useEffect(()=>{
     const canvas=ref.current!,ctx=canvas.getContext('2d')!;const flies=initial();let w=1,h=1,time=0,last=0,raf=0,lastSnapshot=-1,lastIntent=-1,lastReset=reset,lastDodge=-10;
     let streaks:{x:number;y:number;heading:number;t:number}[]=[];
@@ -61,10 +64,13 @@ function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,on
     const world=(p:{x:number;y:number})=>({x:(p.x-w/2-pan.x)/latest.current.zoom+w/2,y:(p.y-h/2-pan.y)/latest.current.zoom+h/2});
     const avoid=(point:{x:number;y:number},force=false)=>{
       if(latest.current.paused||reduced||time-lastDodge<1.2)return;
+      // Reflex layer stays local and instant, but its skittishness is modulated by the
+      // body's REAL collective arousal when available (fallback .5 keeps old feel).
+      const skittish=.75+(latest.current.body?.arousal??.5)*.5;
       const f=flies[0],dx=f.x*w-point.x,dy=f.y*h-point.y,distance=Math.hypot(dx,dy);
-      if(distance<160&&(force||distance>45)){
+      if(distance<160*skittish&&(force||distance>45)){
         const b=bounds(),angle=distance>1?Math.atan2(dy,dx):f.heading+1.1;
-        f.vx=Math.cos(angle)*.27;f.vy=Math.sin(angle)*.32;f.behavior='flying';f.restUntil=time+14;lastDodge=time;lastSnapshot=-1;
+        f.vx=Math.cos(angle)*.27*skittish;f.vy=Math.sin(angle)*.32*skittish;f.behavior='flying';f.restUntil=time+14;lastDodge=time;lastSnapshot=-1;
         f.gesture=null;f.gestureT=0;f.gesturePhase=0;f.cascade=null; // drop any fidget/grooming so the escape stays a clean glide
         // Escape glides away at normal cruise speed (no dart multiplier): face it, aim downrange.
         f.gait='cruise';f.gaitT=0;f.gaitDur=.7;f.heading=angle;f.retarget=time+.7;
@@ -93,7 +99,7 @@ function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,on
           const point=world(p),f=flies[0],distance=Math.hypot(f.x*w-point.x,f.y*h-point.y);
           const scale=1.25*bounds().magnification,angle=f.heading+Math.PI/2,dx=point.x-f.x*w,dy=point.y-f.y*h+(f.behavior==='flying'?5+Math.sin(time*3.4)*1.3:0);
           const bodyX=(dx*Math.cos(angle)+dy*Math.sin(angle))/scale,bodyY=(-dx*Math.sin(angle)+dy*Math.cos(angle))/scale;
-          if((bodyX/13)**2+((bodyY-2)/31)**2<1){latest.current.onCatch({x:p.x/w*100,y:p.y/h*100});latest.current.onApplied("Observation hit: showing Holo's current Connectome thought state.");lastDodge=time;}
+          if((bodyX/13)**2+((bodyY-2)/31)**2<1){latest.current.onCatch({x:p.x/w*100,y:p.y/h*100});latest.current.onApplied("Observation hit: showing Holo's latest real heartbeat narration.");lastDodge=time;}
           else lensIdx=Math.min(LENS.length-1,lensIdx+1);
         }
       }
@@ -109,7 +115,11 @@ function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,on
       if(lastReset!==p.reset){pan={x:0,y:0};lastReset=p.reset;}
       const viewBounds=bounds();
       if(p.intent&&p.intent.sequence!==lastIntent){lastIntent=p.intent.sequence;const f=flies[0];f.behavior=p.intent.action==='rest'?'resting':'flying';f.restUntil=time+25;if(f.behavior==='flying'){f.vx=.055;f.vy=-.025;}p.onApplied('Local behavior demo applied: '+p.intent.action+' → '+f.behavior+'. No brain activity, no cost incurred.',p.intent.reference);lastSnapshot=-1;}
-      if(!p.paused&&!reduced){time+=dt;const arousal=arousalOf(p.neural);flies.forEach(f=>{
+      if(!p.paused&&!reduced){time+=dt;const arousal=p.body?.arousal??arousalOf(p.neural);
+        // Mind layer (slow): this beat's coarse drive biases the rest/fly baseline.
+        const restThreshold=p.drive==='rest'?.45:p.drive==='observe'?.8:.7;
+        const restDur=p.drive==='rest'?16:9;
+        flies.forEach(f=>{
         f.arousal=arousal;
         // Gesture scheduler: transient cosmetic habits, biased by the (simulated) neural state.
         if(f.gesture){f.gestureT+=dt;f.gesturePhase=f.gestureDur?f.gestureT/f.gestureDur:1;if(f.gestureT>=f.gestureDur){f.gesture=null;f.gestureT=0;f.gesturePhase=0;
@@ -132,7 +142,7 @@ function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,on
         f.stepAmp+=(treadTarget-f.stepAmp)*Math.min(1,dt*8);
         if(f.stepAmp>.02)f.stepPhase+=dt*(4+Math.min(7,spNow*.07));
         if(f.behavior==='resting'){if(time>f.restUntil){f.behavior='flying';f.restUntil=time+23;}return;}
-        if(time>f.restUntil&&Math.sin(time*.27)>.7){f.behavior='resting';f.restUntil=time+9;return;}
+        if(time>f.restUntil&&Math.sin(time*.27)>restThreshold){f.behavior='resting';f.restUntil=time+restDur;return;}
         // Stop-and-go locomotion (real flies are intermittent): cruise → abrupt hold → dart off.
         f.gaitT+=dt;
         if(f.gaitT>=f.gaitDur){f.gaitT=0;f.retarget=time;
@@ -198,8 +208,9 @@ function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,on
   return <canvas ref={ref} className="habitat-field" aria-label="Holo habitat. Scroll or pinch to zoom, drag to pan. Holo avoids nearby pointers; click its body to reveal its Connectome thought. Left-click empty glass raises the observer lens through three powers, right-click lowers it through three."/>;
 }
 
-export function FlyCulture({active,mind,neural,brainOnline=BRAIN_ONLINE,onRecord,onOpenRecords,onOpenNeeds}:{active:boolean;mind:{name:string;text:string};neural?:NeuralState;brainOnline?:boolean;onRecord:(text:string,kind:string,reference?:string)=>void;onOpenRecords:()=>void;onOpenNeeds:()=>void}){
+export function FlyCulture({active,mind,neural,body,drive,brainOnline=BRAIN_ONLINE,onRecord,onOpenRecords,onOpenNeeds}:{active:boolean;mind:{name:string;text:string};neural?:NeuralState;body?:BodyState|null;drive?:string|null;brainOnline?:boolean;onRecord:(text:string,kind:string,reference?:string)=>void;onOpenRecords:()=>void;onOpenNeeds:()=>void}){
   const brainStatus=brainOnline?'BRAIN ONLINE':'BRAIN DORMANT';
+  const bodyLive=!!body&&body.arousal!=null;
   const [flies,setFlies]=useState<Snapshot[]>(()=>initial().map(f=>({id:f.id,parent:f.parent,generation:f.generation,energy:Math.round(f.energy),behavior:f.behavior,gesture:f.gesture,gait:f.gait,arousal:f.arousal,groom:0}))),[paused,setPaused]=useState(false),[reset,setReset]=useState(0),[zoom,setZoom]=useState(1),[intent,setIntent]=useState<HabitatIntent|null>(null),[draft,setDraft]=useState(''),[speech,setSpeech]=useState(false),[details,setDetails]=useState(false),[fullscreenError,setFullscreenError]=useState(''),[messages,setMessages]=useState<Message[]>([{who:'Holo',text:'Local observation channel ready. You can wake me, send me exploring, or let me rest.'}]);
   const sequence=useRef(0),stage=useRef<HTMLDivElement>(null);const current=flies[0];
   const gaitText=current.behavior==='resting'?'REST':({cruise:'CRUISE',hold:'HOLD',dart:'DART'} as Record<Gait,string>)[current.gait??'cruise'];
@@ -210,7 +221,7 @@ export function FlyCulture({active,mind,neural,brainOnline=BRAIN_ONLINE,onRecord
   return <section className="culture-page electronic-culture immersive-culture">
     <div className="page-introduction"><div><span className="micro-label">03 / COLONY · LIVING SPACE & LINEAGE</span><h1>A room that becomes a world<span>.</span></h1></div><div className="population-summary"><strong>01</strong><span>HOLO · FIRST GENERATION<br/>LIVING SPACE NOW · LINEAGE TO COME</span></div></div>
     <div className="habitat-layout"><div className="habitat-stage" ref={stage}>
-      <FlyField active={active} selected="Holo" onSnapshot={setFlies} paused={paused} intent={intent} reset={reset} zoom={zoom} onZoom={setZoom} onApplied={(text,reference)=>onRecord(text,'Action',reference)} onCatch={catchHolo} neural={neural}/>
+      <FlyField active={active} selected="Holo" onSnapshot={setFlies} paused={paused} intent={intent} reset={reset} zoom={zoom} onZoom={setZoom} onApplied={(text,reference)=>onRecord(text,'Action',reference)} onCatch={catchHolo} neural={neural} body={body} drive={drive}/>
       <span className="stage-glass" aria-hidden="true"/>
       <span className="habitat-location">CHAMBER 01 / LIVING FIELD<br/><em>One life, and the possibilities not yet unfolded.</em></span>
       <div className="field-tools"><button aria-label="Observe Holo state" aria-expanded={details} onClick={()=>setDetails(!details)}><Info size={16}/></button><button aria-label="Fullscreen habitat" onClick={async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await stage.current?.requestFullscreen();}catch{setFullscreenError('This browser does not support fullscreen. Use the zoom lens instead.');}}}><Maximize size={16}/></button></div>
@@ -220,8 +231,8 @@ export function FlyCulture({active,mind,neural,brainOnline=BRAIN_ONLINE,onRecord
       <div className="habitat-controls"><span title="Scroll to zoom">{Math.round(zoom*100)}%</span><button aria-label="Reset habitat view" onClick={()=>{setZoom(1);setReset(r=>r+1);setSpeech(false);}}><RotateCcw size={14}/></button><button aria-label={paused?'Resume habitat':'Pause habitat'} onClick={()=>setPaused(!paused)}>{paused?<Play size={14}/>:<Pause size={14}/>}</button><button className="accessible-thought" onClick={catchHolo}>Listen to Holo</button></div>
       {fullscreenError&&<span className="fullscreen-error">{fullscreenError}</span>}
     </div></div>
-    <div className="behavior-caption"><span className="cap-dot" aria-hidden="true"/><span>{gaitText}{groomText?` · ${groomText}`:''} · AROUSAL {(current.arousal??0).toFixed(2)} · ENERGY {current.energy}</span><span>BEHAVIOR LIVE · LOCAL SIM · {brainStatus}</span></div>
-    <div className="habitat-notice"><span>Scroll or pinch to zoom · drag to pan · click the body to read its current Connectome state. Dodging, flight and grooming habits (head scratch / wing shudder / sip) are a local behavior simulation scheduled from the simulated neural state — not output from a real nervous system.</span><span>{brainStatus}</span></div>
+    <div className="behavior-caption"><span className="cap-dot" aria-hidden="true"/><span>{gaitText}{groomText?` · ${groomText}`:''} · AROUSAL {(current.arousal??0).toFixed(2)} · ENERGY {current.energy}</span><span>REFLEX LOCAL · BODY {bodyLive?'LIVE':'FALLBACK'} · DRIVE {drive??'—'} · {brainStatus}</span></div>
+    <div className="habitat-notice"><span>Pointer dodging and gesture timing are a local reflex layer. The flight/rest baseline and skittishness follow Holo&rsquo;s body: a read-only live neural simulation, refreshed about once a minute through the same public feed as the rest of the page. The brain&rsquo;s coarse drive for this beat &mdash; one heartbeat every fifteen minutes &mdash; biases rest versus roam. When the feed is unreachable the habitat falls back to its local simulation and says so. Motion remains a biomimetic rendering, not the conditioned reflex of a real biological nervous system.</span><span>{brainStatus}</span></div>
     <section className="holo-dialogue"><div><span className="micro-label">A CHANNEL TO HOLO</span><h2>Leave a thought.</h2><p>Give Holo an intent and watch how it acts.</p><small>LOCAL DEMO / {brainStatus}</small><small className="dialogue-note">(The Channel is a local preview — it isn&apos;t wired to Holo&apos;s brain yet. That link opens later, as the project moves forward.)</small></div><div className="dialogue-content"><div className="dialogue-history" aria-live="polite">{messages.slice(-6).map((m,i)=><article key={`${i}-${m.text}`}><span>{m.who}</span><p>{m.text}</p></article>)}</div><form onSubmit={send}><input aria-label="Message Holo" placeholder="Try: wake up / explore / rest" maxLength={500} value={draft} onChange={e=>setDraft(e.target.value)}/><button type="submit" aria-label="Send message to Holo" disabled={!draft.trim()}><Send size={16}/></button></form><p className="dialogue-route">Your words → Holo’s intent → habitat behavior <span>Inputs and outcomes are traceable in the Journal</span></p></div></section>
   </section>;
 }

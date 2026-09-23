@@ -24,6 +24,14 @@ export type HoloMarket = {
   trades: number | null;
   source: string | null;
 };
+export type HoloBody = {
+  arousal: number | null;
+  cohesion: number | null;
+  rest: number | null;
+  wingbeat: number | null;
+  valence: number | null;
+  vitality: number | null;
+};
 export type HoloLive = {
   status: "idle" | "live" | "error";
   brainOnline: boolean;
@@ -31,6 +39,8 @@ export type HoloLive = {
   spend: HoloSpend | null;
   budget: HoloBudget | null;
   market: HoloMarket | null;
+  body: HoloBody | null;
+  drive: string | null;
   entries: HoloLiveEntry[];
   generatedAt: string | null;
 };
@@ -44,6 +54,8 @@ const IDLE: HoloLive = {
   spend: null,
   budget: null,
   market: null,
+  body: null,
+  drive: null,
   entries: [],
   generatedAt: null,
 };
@@ -80,6 +92,15 @@ export function useHoloLive(enabled = true): HoloLive {
             trades?: number | null;
             source?: string | null;
           } | null;
+          body?: {
+            arousal?: number | null;
+            cohesion?: number | null;
+            rest?: number | null;
+            wingbeat?: number | null;
+            valence?: number | null;
+            vitality?: number | null;
+          } | null;
+          drive?: string | null;
           generated_at?: string | null;
         };
         if (!alive) return;
@@ -112,6 +133,18 @@ export function useHoloLive(enabled = true): HoloLive {
                   source: str(data.market.source),
                 }
               : null,
+          body:
+            data?.body && typeof data.body === "object"
+              ? {
+                  arousal: num(data.body.arousal),
+                  cohesion: num(data.body.cohesion),
+                  rest: num(data.body.rest),
+                  wingbeat: num(data.body.wingbeat),
+                  valence: num(data.body.valence),
+                  vitality: num(data.body.vitality),
+                }
+              : null,
+          drive: typeof data?.drive === "string" ? data.drive : null,
           entries,
           generatedAt: data?.generated_at ?? null,
         });
