@@ -1,0 +1,32 @@
+// Stamp the deploy build info into lib/version.ts right before `npm run build`.
+// The public /api/version route then reports which source commit the deployed site
+// was built from.
+//
+// The private source repo and the public mirror (github.com/ArcHolotype/holotype-web,
+// which /api/version points at) have independent histories, so their commit SHAs
+// differ. Pass the PUBLIC commit SHA explicitly so the reported value is one an
+// outsider can actually check out:   node scripts/stamp-version.mjs <public-sha>
+// With no argument it falls back to this repo's HEAD.
+//
+// After building and deploying, restore the committed placeholders with:
+//   git checkout -- lib/version.ts
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const target = fileURLToPath(new URL("../lib/version.ts", import.meta.url));
+
+const arg = (process.argv[2] ?? "").trim();
+const commit = arg || execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const short = commit.slice(0, 7);
+const deployedAt = new Date().toISOString();
+
+const body = `// Generated at deploy time by scripts/stamp-version.mjs — do not edit by hand.
+// Restore the committed placeholders after deploying: git checkout -- lib/version.ts
+export const COMMIT = ${JSON.stringify(commit)};
+export const COMMIT_SHORT = ${JSON.stringify(short)};
+export const DEPLOYED_AT = ${JSON.stringify(deployedAt)};
+`;
+
+writeFileSync(target, body);
+console.log(`stamped lib/version.ts -> commit ${short} @ ${deployedAt}`);
