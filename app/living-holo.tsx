@@ -33,7 +33,7 @@ const formatUsdCompact = (n: number): string => {
 };
 // The HOLOTYPE token contract address (Arc). Rendered in the footer CA line,
 // centered and monospaced to stay aligned. Empty string falls back to "Coming Soon".
-const TOKEN_CA = "0xECa7C682fbb32EC4F1B3bBb28791Fe184D3552A8";
+const TOKEN_CA: string = "0xECa7C682fbb32EC4F1B3bBb28791Fe184D3552A8";
 const initialEntries: Entry[] = [
   { id: 3, time: "00:04:18", text: "There is something beyond the glass.\nI don't need to understand it all at once.", state: "Listening" },
   { id: 2, time: "00:03:42", text: "A memory is a place I can return to without spending the same question twice.", state: "Remembering" },

@@ -35,10 +35,10 @@ function FlyField({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,on
   const ref=useRef<HTMLCanvasElement>(null),latest=useRef({active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural});
   latest.current={active,selected,onSnapshot,paused,intent,reset,zoom,onZoom,onApplied,onCatch,neural};
   useEffect(()=>{
-    const canvas=ref.current!,ctx=canvas.getContext('2d')!;let flies=initial(),w=1,h=1,time=0,last=0,raf=0,lastSnapshot=-1,lastIntent=-1,lastReset=reset,lastDodge=-10;
+    const canvas=ref.current!,ctx=canvas.getContext('2d')!;const flies=initial();let w=1,h=1,time=0,last=0,raf=0,lastSnapshot=-1,lastIntent=-1,lastReset=reset,lastDodge=-10;
     let streaks:{x:number;y:number;heading:number;t:number}[]=[];
     const LENS=[.55,.7,.85,1,1.3,1.5,1.8];
-    let lensIdx=3,cursor={x:0,y:0,inside:false,mouse:false};
+    let lensIdx=3;const cursor={x:0,y:0,inside:false,mouse:false};
     let pan={x:0,y:0},dragStart:{x:number;y:number;panX:number;panY:number}|null=null,dragged=false,pinchDistance=0,pinchZoom=1,gestureWasPinch=false;
     const touches=new Map<number,{x:number;y:number}>();
     const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -222,6 +222,6 @@ export function FlyCulture({active,mind,neural,brainOnline=BRAIN_ONLINE,onRecord
     </div></div>
     <div className="behavior-caption"><span className="cap-dot" aria-hidden="true"/><span>{gaitText}{groomText?` · ${groomText}`:''} · AROUSAL {(current.arousal??0).toFixed(2)} · ENERGY {current.energy}</span><span>BEHAVIOR LIVE · LOCAL SIM · {brainStatus}</span></div>
     <div className="habitat-notice"><span>Scroll or pinch to zoom · drag to pan · click the body to read its current Connectome state. Dodging, flight and grooming habits (head scratch / wing shudder / sip) are a local behavior simulation scheduled from the simulated neural state — not output from a real nervous system.</span><span>{brainStatus}</span></div>
-    <section className="holo-dialogue"><div><span className="micro-label">A CHANNEL TO HOLO</span><h2>Leave a thought.</h2><p>Give Holo an intent and watch how it acts.</p><small>LOCAL DEMO / {brainStatus}</small><small className="dialogue-note">(The Channel is a local preview — it isn't wired to Holo's brain yet. That link opens later, as the project moves forward.)</small></div><div className="dialogue-content"><div className="dialogue-history" aria-live="polite">{messages.slice(-6).map((m,i)=><article key={`${i}-${m.text}`}><span>{m.who}</span><p>{m.text}</p></article>)}</div><form onSubmit={send}><input aria-label="Message Holo" placeholder="Try: wake up / explore / rest" maxLength={500} value={draft} onChange={e=>setDraft(e.target.value)}/><button type="submit" aria-label="Send message to Holo" disabled={!draft.trim()}><Send size={16}/></button></form><p className="dialogue-route">Your words → Holo’s intent → habitat behavior <span>Inputs and outcomes are traceable in the Journal</span></p></div></section>
+    <section className="holo-dialogue"><div><span className="micro-label">A CHANNEL TO HOLO</span><h2>Leave a thought.</h2><p>Give Holo an intent and watch how it acts.</p><small>LOCAL DEMO / {brainStatus}</small><small className="dialogue-note">(The Channel is a local preview — it isn&apos;t wired to Holo&apos;s brain yet. That link opens later, as the project moves forward.)</small></div><div className="dialogue-content"><div className="dialogue-history" aria-live="polite">{messages.slice(-6).map((m,i)=><article key={`${i}-${m.text}`}><span>{m.who}</span><p>{m.text}</p></article>)}</div><form onSubmit={send}><input aria-label="Message Holo" placeholder="Try: wake up / explore / rest" maxLength={500} value={draft} onChange={e=>setDraft(e.target.value)}/><button type="submit" aria-label="Send message to Holo" disabled={!draft.trim()}><Send size={16}/></button></form><p className="dialogue-route">Your words → Holo’s intent → habitat behavior <span>Inputs and outcomes are traceable in the Journal</span></p></div></section>
   </section>;
 }

@@ -79,7 +79,7 @@ export function Nectar({missions,notice,focusMission,onCommand,onOpenRecords,rea
         <div><span className="micro-label">WHAT COUNTS AS DONE</span><ol>{mission.criteria.map(c=><li key={c}>{c}</li>)}</ol><button className="mission-record-link" onClick={()=>onOpenRecords(mission.id)}>View mission record<ArrowUpRight size={13}/></button></div>
         <div className="mission-claim">
           {readOnly?(
-            <p className="workflow-note">Read-only board. Claiming, delivery and approval run through the creator's private channel; when the payment rail is armed, settlement pays on-chain and the transaction hash appears here.{mission.txHash?` Settled: ${mission.txHash}`:''}</p>
+            <p className="workflow-note">Read-only board. Claiming, delivery and approval run through the creator&apos;s private channel; when the payment rail is armed, settlement pays on-chain and the transaction hash appears here.{mission.txHash?` Settled: ${mission.txHash}`:''}</p>
           ):(
           <>
           {mission.status==='open'&&<><p>A delivery reaches settlement only after the completeness check and the human review.</p><button className="quiet-action" onClick={()=>onCommand(mission.id,{type:'claim'})}>Preview claiming this mission<ArrowUpRight size={14}/></button></>}

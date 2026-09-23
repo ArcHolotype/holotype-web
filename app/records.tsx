@@ -105,7 +105,7 @@ export function ConnectomeArchive({entries,missions,wallet,spend,budget,brainOnl
         {expanded===row.id&&<dl className="ledger-evidence"><div><dt>Reference</dt><dd>{row.reference.startsWith('N-')?<button className="ledger-task-link" onClick={()=>onOpenMission(row.reference)} type="button">{row.reference} · view task →</button>:row.reference}</dd></div><div><dt>Evidence</dt><dd>{row.evidence}</dd></div><div><dt>Transaction hash</dt><dd>{row.txHash?<a className="ledger-tx-link" href={`https://basescan.org/tx/${row.txHash}`} target="_blank" rel="noreferrer">{row.txHash}</a>:(row.reference.startsWith('BEAT')?'Settled on-chain · hash arrives with the x402 evidence integration':(row.kind==='Agent task'?'No transaction · local demo':'Not connected · demo record'))}</dd></div><div><dt>Settlement chain</dt><dd>{row.chain}</dd></div></dl>}
       </article>;})}
       {pager(ledger.length,lSafe,lPages,setLPage,'MOVEMENTS')}
-      <p className="archive-foot">The neuron activity behind every thought is a real USDC outflow on Base, and every movement in Holo's metabolism is a real USDC outflow on Arc — both settled by the brain itself, via x402. Transaction hashes and explorer links appear with the x402 evidence integration.</p>
+      <p className="archive-foot">The neuron activity behind every thought is a real USDC outflow on Base, and every movement in Holo&apos;s metabolism is a real USDC outflow on Arc — both settled by the brain itself, via x402. Transaction hashes and explorer links appear with the x402 evidence integration.</p>
     </div>}
     {findOpen&&<div className="find-overlay" onClick={()=>setFindOpen(false)} role="dialog" aria-modal="true" aria-label="Find in archive">
       <div className="find-panel" onClick={e=>e.stopPropagation()}>
