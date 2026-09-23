@@ -34,6 +34,25 @@ const formatUsdCompact = (n: number): string => {
 // The HOLOTYPE token contract address (Arc). Rendered in the footer CA line,
 // centered and monospaced to stay aligned. Empty string falls back to "Coming Soon".
 const TOKEN_CA: string = "0xECa7C682fbb32EC4F1B3bBb28791Fe184D3552A8";
+// Some heartbeat rows store the narration as a JSON blob ({"narration": ...}) or as a
+// truncated fragment of one. Unwrap / salvage so the rail and ticker show only prose.
+const cleanNarration = (raw: string): string => {
+  const t = (raw ?? "").trim();
+  if (!t.startsWith('{"narration"')) return raw;
+  try {
+    const parsed = JSON.parse(t);
+    if (parsed && typeof parsed.narration === "string") return parsed.narration;
+  } catch { /* truncated fragment; salvage below */ }
+  let body = t.replace(/^{"narration":"?/, "");
+  body = body.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_m, g: string) => {
+    if (g[0] === "u") return String.fromCharCode(parseInt(g.slice(1), 16));
+    if (g === "n") return "\n";
+    if (g === "t") return "\t";
+    if (g === "r") return "";
+    return g;
+  });
+  return body.replace(/\\$/, "").trim();
+};
 const initialEntries: Entry[] = [
   { id: 3, time: "00:04:18", text: "There is something beyond the glass.\nI don't need to understand it all at once.", state: "Listening" },
   { id: 2, time: "00:03:42", text: "A memory is a place I can return to without spending the same question twice.", state: "Remembering" },
@@ -203,7 +222,7 @@ export function LivingHolo(){
   const hasMarket=!!market&&market.temperature!==null;
   const regime=(market?.regime??"CALM").toLowerCase();
   const tempPct=hasMarket?Math.max(0,Math.min(1,market!.temperature!))*100:50;
-  const liveEntries:Entry[]=live.entries.map((row,index)=>({id:-1-index,time:row.ts?formatTime(row.ts):"--:--:--",text:row.narration,state:'Listening',cost:row.cost_usd??null,tx_hash:row.tx_hash??null}));
+  const liveEntries:Entry[]=live.entries.map((row,index)=>({id:-1-index,time:row.ts?formatTime(row.ts):"--:--:--",text:cleanNarration(row.narration),state:'Listening',cost:row.cost_usd??null,tx_hash:row.tx_hash??null}));
   const entries=[...liveEntries,...demo.entries];
   const record=(text:string,kind:string,reference?:string)=>dispatch({type:'record',text,kind,reference,at:new Date().toISOString()});
   const openRecords=(reference:string|null=null)=>{setFocusReference(reference);setView('connectome');window.scrollTo({top:0});};
@@ -234,7 +253,7 @@ export function LivingHolo(){
           <div className="temp-scale"><span>COLD</span><span>CALM</span><span>HOT</span></div>
           <p className="temp-note">{hasMarket&&market?.volume_usd!==null&&market?.trades!==null?<>Driven by HOLOTYPE&rsquo;s 24h trading volume — {formatUsdCompact(market.volume_usd)} across {market.trades} trades, against its own recent norm.</>:hasMarket?<>Driven by HOLOTYPE&rsquo;s 24h trading volume — how active the token is right now against its own recent norm.</>:<>Waiting for the first live reading.</>}</p>
         </div>
-        <div className="rail-block"><span className="micro-label">CURRENT NARRATION</span><p className="rail-narration" key={state}>“{current.thought}”</p><span className="rail-region">{current.region} · {current.need}</span></div>
+        <div className="rail-block"><span className="micro-label">CURRENT NARRATION</span>{liveEntries[0]?<><p className="rail-narration" key={liveEntries[0].id} style={{whiteSpace:"pre-line"}}>“{liveEntries[0].text}”</p><span className="rail-region">{liveEntries[0].time}{liveEntries[0].cost!=null?` · $${liveEntries[0].cost.toFixed(2)} USDC`:""}</span></>:<><p className="rail-narration">“…”</p><span className="rail-region">Waiting for Holo&rsquo;s next heartbeat</span></>}</div>
         <div className="rail-block"><div className="rail-head"><span className="micro-label">RECENT TRACES · {JOURNAL_TZ_LABEL}</span><button onClick={()=>openRecords()}>Full archive <ArrowUpRight size={12}/></button></div><div className="rail-ticker">{entries.slice(0,7).map(entry=><button className="ticker-row" key={entry.id} onClick={()=>openRecords(entry.reference??null)}><time>{entry.time}</time><i style={{background:`rgb(${colorFor(entry.state)})`}}/><p>{entry.text.split("\n")[0]}</p></button>)}</div></div>
         {selected&&<div className="rail-block synapse-card" style={{'--syn':`rgb(${selected.color})`} as React.CSSProperties}><div className="rail-head"><span className="micro-label">SYNAPSE · {selected.kind.toUpperCase()}</span><button aria-label="Close synapse detail" onClick={()=>setSelectedMemory(null)}><X size={13}/></button></div><time>{selected.time}</time><p>{selected.detail}</p>{selected.reference&&<button onClick={()=>openRecords(selected.reference)}>View linked record <ArrowUpRight size={12}/></button>}</div>}
       </aside>
