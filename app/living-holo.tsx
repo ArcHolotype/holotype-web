@@ -134,23 +134,26 @@ function NeuralOrganism({ state, impulse, paused, onTouch, memories, selectedId,
         const firing=Math.pow(Math.max(0,Math.sin(time*(active===2?2.8:1.6)+n.phase+n.x*3)),18);
         return {x:cx+x*size*perspective*breathe,y:cy+y*size*perspective*breathe,z,light:firing*.65+burst,group:n.group};
       });
-      ctx.lineWidth=.55;
-      edges.forEach(([i,j],k)=>{const a=projected[i],b=projected[j];const light=Math.max(a.light,b.light);ctx.strokeStyle=`rgba(${rgb},${.045+light*.24})`;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();if(k%13===0&&light>.3){const f=(time*.65+k*.071)%1;ctx.fillStyle=`rgba(${rgb},${light*.9})`;ctx.beginPath();ctx.arc(a.x+(b.x-a.x)*f,a.y+(b.y-a.y)*f,1.25,0,6.283);ctx.fill();}});
-      projected.forEach((p,i)=>{const radius=(.55+p.light*1.1)*(1-p.z*.22);ctx.fillStyle=`rgba(${i%19===0?'233,223,197':rgb},${.22+p.light*.7})`;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,6.283);ctx.fill();if(p.light>.75){const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,9);g.addColorStop(0,`rgba(${rgb},.19)`);g.addColorStop(1,`rgba(${rgb},0)`);ctx.fillStyle=g;ctx.fillRect(p.x-9,p.y-9,18,18);}});
       // One slot per neural node (nodes.length = 1400). Collisions resolve newest-wins so a
       // node never shows a stale trace, and the ring count can never exceed the node count.
       const bySlot=new Map<number,SynapseMemory>();
       for(const m of [...controls.current.memories].reverse())bySlot.set(hash(m.id)%nodes.length,m);
+      ctx.lineWidth=.55;
+      edges.forEach(([i,j],k)=>{const a=projected[i],b=projected[j];const light=Math.max(a.light,b.light);ctx.strokeStyle=`rgba(${rgb},${.045+light*.24})`;ctx.beginPath();ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();if(k%13===0&&light>.3){const f=(time*.65+k*.071)%1;ctx.fillStyle=`rgba(${rgb},${light*.9})`;ctx.beginPath();ctx.arc(a.x+(b.x-a.x)*f,a.y+(b.y-a.y)*f,1.25,0,6.283);ctx.fill();}});
+      // Only FILLED slots get a marker; empty neurons stay invisible so an unfilled position
+      // never reads as an occupied slot. Edges and travelling sparks keep the tissue alive.
+      projected.forEach((p,i)=>{if(!bySlot.has(i))return;const radius=(.55+p.light*1.1)*(1-p.z*.22);ctx.fillStyle=`rgba(${i%19===0?'233,223,197':rgb},${.22+p.light*.7})`;ctx.beginPath();ctx.arc(p.x,p.y,radius,0,6.283);ctx.fill();if(p.light>.75){const g=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,9);g.addColorStop(0,`rgba(${rgb},.19)`);g.addColorStop(1,`rgba(${rgb},0)`);ctx.fillStyle=g;ctx.fillRect(p.x-9,p.y-9,18,18);}});
       memPts=[...bySlot.values()].map(m=>({id:m.id,color:m.color,...projected[hash(m.id)%nodes.length]}));
       memPts.forEach(m=>{
         const selected=m.id===controls.current.selectedId;
+        const ink=selected?'232,193,90':'223,232,225';
         const radius=selected?5.4:3.2;
-        ctx.strokeStyle=`rgba(${m.color},${selected?.95:.5})`;
+        ctx.strokeStyle=`rgba(${ink},${selected?.95:.55})`;
         ctx.lineWidth=selected?1.4:1;
         ctx.beginPath();ctx.arc(m.x,m.y,radius,0,6.283);ctx.stroke();
-        ctx.fillStyle=`rgba(${m.color},${selected?.95:.7})`;
+        ctx.fillStyle=`rgba(${ink},${selected?.95:.75})`;
         ctx.beginPath();ctx.arc(m.x,m.y,1.7,0,6.283);ctx.fill();
-        if(selected){const t=(time%1.5)/1.5;ctx.strokeStyle=`rgba(${m.color},${(1-t)*.45})`;ctx.lineWidth=1;ctx.beginPath();ctx.arc(m.x,m.y,radius+t*15,0,6.283);ctx.stroke();}
+        if(selected){const t=(time%1.5)/1.5;ctx.strokeStyle=`rgba(${ink},${(1-t)*.45})`;ctx.lineWidth=1;ctx.beginPath();ctx.arc(m.x,m.y,radius+t*15,0,6.283);ctx.stroke();}
       });
       raf=requestAnimationFrame(draw);
     };raf=requestAnimationFrame(draw);
