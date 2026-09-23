@@ -243,7 +243,9 @@ export function LivingHolo(){
     beatRows.map(r=>cleanNarration(r.narration).length),
   ];
   const waveColors=[states[0].color,states[1].color,states[2].color];
-  const allowancePct=live.status==='live'&&live.budget&&live.budget.cap_usd>0?Math.round(Math.max(0,Math.min(1,live.budget.remaining_today_usd/live.budget.cap_usd))*100):null;
+  const budgetCap=live.status==='live'&&live.budget?live.budget.cap_usd:null;
+  const budgetLeft=live.status==='live'&&live.budget?live.budget.remaining_today_usd:null;
+  const allowancePct=budgetCap!=null&&budgetLeft!=null&&budgetCap>0?Math.round(Math.max(0,Math.min(1,budgetLeft/budgetCap))*100):null;
   const curiosityPct=hasMarket?Math.round(Math.max(0,Math.min(1,market!.temperature!))*100):null;
   const openRecords=(reference:string|null=null)=>{setFocusReference(reference);setView('connectome');window.scrollTo({top:0});};
   const openMission=(id:string)=>{setMissionFocus({id,version:Date.now()});setView('nectar');window.scrollTo({top:0});};
