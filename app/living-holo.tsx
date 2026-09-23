@@ -162,45 +162,43 @@ function NeuralOrganism({ state, impulse, paused, onTouch, memories, selectedId,
   return <canvas ref={ref} className="organism-canvas" aria-label="Interactive illustrative Holo neural network. Drag to rotate, scroll to zoom, click a ringed synapse to read its trace, click empty space to send a signal."/>;
 }
 
-function LiveWaves({ state, impulse, paused }: { state: number; impulse: number; paused: boolean }) {
+// Real per-beat sparklines (inference cost, beat interval, narration length) derived from
+// the already-fetched journal. No animation loop: it redraws only when the data changes.
+function LiveWaves({ series, colors }: { series: number[][]; colors: string[] }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const controls = useRef({ state, impulse, paused });
-  controls.current = { state, impulse, paused };
   useEffect(() => {
     const canvas = ref.current!;
     const ctx = canvas.getContext("2d")!;
-    let w = 0, h = 0, raf = 0, time = 0, last = 0, spikeAt = -9, lastImpulse = 0;
-    const motion = matchMedia("(prefers-reduced-motion: reduce)");
-    const resize = () => { const box = canvas.getBoundingClientRect(); w = box.width; h = box.height; const dpr = Math.min(devicePixelRatio, 2); canvas.width = w*dpr; canvas.height = h*dpr; ctx.setTransform(dpr,0,0,dpr,0,0); };
-    const observer = new ResizeObserver(resize); observer.observe(canvas); resize();
-    const draw = (now: number) => {
-      const dt = Math.min((now-last)/1000,.04); last = now;
-      if (!controls.current.paused && !motion.matches) time += dt;
-      if (controls.current.impulse !== lastImpulse) { spikeAt = time; lastImpulse = controls.current.impulse; }
+    const draw = () => {
+      const box = canvas.getBoundingClientRect();
+      const dpr = Math.min(devicePixelRatio, 2);
+      canvas.width = box.width*dpr; canvas.height = box.height*dpr;
+      ctx.setTransform(dpr,0,0,dpr,0,0);
+      const w = box.width, h = box.height;
       ctx.clearRect(0,0,w,h);
-      const spike = Math.max(0, 1-(time-spikeAt)/1.4);
       const rowH = h/3;
-      for (let row = 0; row < 3; row++) {
-        const activeRow = row === controls.current.state;
-        const amp = (activeRow?.6:.18) + spike*(activeRow?.32:.1);
+      series.forEach((pts, row) => {
         const base = rowH*row + rowH/2;
-        ctx.beginPath();
-        for (let x = 0; x <= w; x += 3) {
-          const t = x/w*Math.PI*2;
-          const v = Math.sin(t*3+time*(1.1+row*.35)) + .55*Math.sin(t*7-time*1.7+row) + .3*Math.sin(t*13+time*2.3);
-          const y = base + v*rowH*.32*amp;
-          if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        if (pts.length < 2) {
+          ctx.strokeStyle = `rgba(${colors[row]},.22)`; ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(0, base); ctx.lineTo(w, base); ctx.stroke();
+          return;
         }
-        ctx.strokeStyle = `rgba(${states[row].color},${activeRow?.85:.28})`;
-        ctx.lineWidth = activeRow ? 1.3 : 1;
-        ctx.stroke();
-      }
-      raf = requestAnimationFrame(draw);
+        const min = Math.min(...pts), max = Math.max(...pts), span = max-min || 1;
+        ctx.beginPath();
+        pts.forEach((v, i) => {
+          const x = i/(pts.length-1)*w;
+          const y = base + (.5-(v-min)/span)*rowH*.62;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = `rgba(${colors[row]},.8)`; ctx.lineWidth = 1.2; ctx.stroke();
+      });
     };
-    raf = requestAnimationFrame(draw);
-    return () => { cancelAnimationFrame(raf); observer.disconnect(); };
-  }, []);
-  return <canvas ref={ref} className="live-waves" aria-label="Live neural channel activity for Listening, Remembering and Seeking."/>;
+    draw();
+    const observer = new ResizeObserver(draw); observer.observe(canvas);
+    return () => observer.disconnect();
+  }, [series, colors]);
+  return <canvas ref={ref} className="live-waves" aria-label="Real per-beat signals: inference cost per beat, minutes between beats, and narration length per beat."/>;
 }
 
 export function LivingHolo(){
@@ -233,14 +231,25 @@ export function LivingHolo(){
   const tempPct=hasMarket?Math.max(0,Math.min(1,market!.temperature!))*100:50;
   const liveEntries:Entry[]=live.entries.map((row,index)=>({id:-1-index,time:row.ts?formatTime(row.ts):"--:--:--",text:cleanNarration(row.narration),state:'Listening',cost:row.cost_usd??null,tx_hash:row.tx_hash??null}));
   const entries=liveEntries;
+  const [filter,setFilter]=useState<'all'|'journal'|'metabolism'|'missions'>('all');
+  const metabolismRows:Entry[]=ledgerMovements.map((row,i)=>({id:-100-i,time:row.time,text:`${row.title} · ${row.chain} · ${row.status} · ${row.amount} USDC`,state:row.kind,reference:row.reference}));
+  const missionRows:Entry[]=realMissions.map((m,i)=>({id:-200-i,time:m.updatedAt?formatTime(m.updatedAt):"--:--:--",text:`${m.title} · ${m.status} · $${(m.rewardCents/100).toFixed(2)}`,state:"MISSION",reference:m.id}));
+  const tickerRows:Entry[]=filter==='all'?[...liveEntries,...metabolismRows,...missionRows]:filter==='journal'?liveEntries:filter==='metabolism'?metabolismRows:missionRows;
+  // Real per-beat series for the sparklines (oldest→newest), derived only from the fetched journal.
+  const beatRows=[...live.entries].reverse();
+  const waveSeries:number[][]=[
+    beatRows.map(r=>r.cost_usd??0),
+    beatRows.map((r,i,a)=>i===0||!r.ts||!a[i-1].ts?0:Math.max(0,(Date.parse(r.ts)-Date.parse(a[i-1].ts!))/60000)),
+    beatRows.map(r=>cleanNarration(r.narration).length),
+  ];
+  const waveColors=[states[0].color,states[1].color,states[2].color];
+  const allowancePct=live.status==='live'&&live.budget&&live.budget.cap_usd>0?Math.round(Math.max(0,Math.min(1,live.budget.remaining_today_usd/live.budget.cap_usd))*100):null;
+  const curiosityPct=hasMarket?Math.round(Math.max(0,Math.min(1,market!.temperature!))*100):null;
   const openRecords=(reference:string|null=null)=>{setFocusReference(reference);setView('connectome');window.scrollTo({top:0});};
   const openMission=(id:string)=>{setMissionFocus({id,version:Date.now()});setView('nectar');window.scrollTo({top:0});};
   const current=states[state];
   const stimulate=(next:number)=>{setState(next);setImpulse(v=>v+1);};
-  const memories:SynapseMemory[]=[
-    ...entries.map(entry=>({id:`journal-${entry.id}`,kind:entry.state,color:colorFor(entry.state),time:entry.time,detail:entry.text,reference:entry.reference})),
-    ...ledgerMovements.map(row=>({id:`ledger-${row.id}`,kind:row.kind,color:colorFor(row.kind),time:row.time,detail:`${row.title} · ${row.chain} · ${row.status} · ${row.amount} USDC`,reference:row.reference})),
-  ];
+  const memories:SynapseMemory[]=tickerRows.map(entry=>({id:String(entry.id),kind:entry.state,color:colorFor(entry.state),time:entry.time,detail:entry.text,reference:entry.reference}));
   const selected=memories.find(memory=>memory.id===selectedMemory)??null;
   // The teaser quote shows the trace you actually clicked (else the newest real heartbeat);
   // never a fabricated demo line.
@@ -256,7 +265,7 @@ export function LivingHolo(){
       <div className="token-ca">CA: {TOKEN_CA!==""?TOKEN_CA:"Coming Soon"}</div>
       <button className="thought-preview" onClick={()=>openRecords(previewTrace&&selected?selected.reference??null:null)}><span className="micro-label">FROM THE CONNECTOME</span>{previewTrace?<p key={previewTrace.id}>“{previewTrace.text.split("\n")[0]}”</p>:<p>“…”</p>}<span>Listen in <ArrowUpRight size={14}/></span></button>
       <aside className="life-rail" aria-label="Holo live vitals and trace archive">
-        <div className="rail-block"><div className="rail-head"><span className="micro-label">LIVE NEURAL CHANNELS</span><button aria-label={paused?'Resume animation':'Pause animation'} onClick={()=>setPaused(!paused)}>{paused?<Play size={13}/>:<Pause size={13}/>}</button></div><LiveWaves state={state} impulse={impulse} paused={paused}/><div className="rail-channels">{states.map((s,i)=><button key={s.name} aria-pressed={state===i} onClick={()=>stimulate(i)}><i style={{background:`rgb(${s.color})`}}/>{s.name}</button>)}</div><div className="rail-bars"><span>Energy <b>{current.energy}%</b><i><em style={{width:`${current.energy}%`}}/></i></span><span>Curiosity <b>{current.curiosity}%</b><i><em style={{width:`${current.curiosity}%`}}/></i></span></div></div>
+        <div className="rail-block"><div className="rail-head"><span className="micro-label">LIVE SIGNALS</span><button aria-label={paused?'Resume animation':'Pause animation'} onClick={()=>setPaused(!paused)}>{paused?<Play size={13}/>:<Pause size={13}/>}</button></div><LiveWaves series={waveSeries} colors={waveColors}/><div className="rail-channels wave-legend"><span><i style={{background:`rgb(${waveColors[0]})`}}/>cost/beat</span><span><i style={{background:`rgb(${waveColors[1]})`}}/>min/beat</span><span><i style={{background:`rgb(${waveColors[2]})`}}/>chars/beat</span></div><div className="rail-channels">{(['all','journal','metabolism','missions'] as const).map(f=><button key={f} aria-pressed={filter===f} onClick={()=>setFilter(f)}>{f==='all'?'All traces':f==='journal'?'Journal':f==='metabolism'?'Metabolism':'Missions'}</button>)}</div><div className="rail-bars"><span>Allowance left <b>{allowancePct!=null?`${allowancePct}%`:"—"}</b><i><em style={{width:`${allowancePct??0}%`}}/></i></span><span>Market temp <b>{curiosityPct!=null?`${curiosityPct}%`:"—"}</b><i><em style={{width:`${curiosityPct??0}%`}}/></i></span></div></div>
         <div className={`rail-block market-temp${hasMarket?` regime-${regime}`:" regime-idle"}`}>
           <div className="rail-head"><span className="micro-label">MARKET TEMPERATURE</span>{hasMarket&&market?.source==="token-volume"&&<span className="temp-src">HOLOTYPE · 24H</span>}</div>
           <div className="temp-read">{hasMarket?<b className="temp-regime">{(market?.regime??"CALM").toUpperCase()}</b>:<b className="temp-regime">READING…</b>}<span className="temp-value">{hasMarket?market!.temperature!.toFixed(2):"—"}</span></div>
@@ -265,7 +274,7 @@ export function LivingHolo(){
           <p className="temp-note">{hasMarket&&market?.volume_usd!==null&&market?.trades!==null?<>Driven by HOLOTYPE&rsquo;s 24h trading volume — {formatUsdCompact(market.volume_usd)} across {market.trades} trades, against its own recent norm.</>:hasMarket?<>Driven by HOLOTYPE&rsquo;s 24h trading volume — how active the token is right now against its own recent norm.</>:<>Waiting for the first live reading.</>}</p>
         </div>
         <div className="rail-block"><span className="micro-label">CURRENT NARRATION</span>{liveEntries[0]?<><p className="rail-narration" key={liveEntries[0].id} style={{whiteSpace:"pre-line"}}>“{liveEntries[0].text}”</p><span className="rail-region">{liveEntries[0].time}{liveEntries[0].cost!=null?` · $${liveEntries[0].cost.toFixed(2)} USDC`:""}</span></>:<><p className="rail-narration">“…”</p><span className="rail-region">Waiting for Holo&rsquo;s next heartbeat</span></>}</div>
-        <div className="rail-block"><div className="rail-head"><span className="micro-label">RECENT TRACES · {JOURNAL_TZ_LABEL}</span><button onClick={()=>openRecords()}>Full archive <ArrowUpRight size={12}/></button></div><div className="rail-ticker">{entries.slice(0,7).map(entry=><button className="ticker-row" key={entry.id} onClick={()=>openRecords(entry.reference??null)}><time>{entry.time}</time><i style={{background:`rgb(${colorFor(entry.state)})`}}/><p>{entry.text.split("\n")[0]}</p></button>)}</div></div>
+        <div className="rail-block"><div className="rail-head"><span className="micro-label">RECENT TRACES · {JOURNAL_TZ_LABEL}</span><button onClick={()=>openRecords()}>Full archive <ArrowUpRight size={12}/></button></div><div className="rail-ticker">{tickerRows.slice(0,7).map(entry=><button className="ticker-row" key={entry.id} onClick={()=>openRecords(entry.reference??null)}><time>{entry.time}</time><i style={{background:`rgb(${colorFor(entry.state)})`}}/><p>{entry.text.split("\n")[0]}</p></button>)}</div></div>
         {selected&&<div className="rail-block synapse-card" style={{'--syn':`rgb(${selected.color})`} as React.CSSProperties}><div className="rail-head"><span className="micro-label">SYNAPSE · {selected.kind.toUpperCase()}</span><button aria-label="Close synapse detail" onClick={()=>setSelectedMemory(null)}><X size={13}/></button></div><time>{selected.time}</time><p>{selected.detail}</p>{selected.reference&&<button onClick={()=>openRecords(selected.reference)}>View linked record <ArrowUpRight size={12}/></button>}</div>}
       </aside>
     </section>}

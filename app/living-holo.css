@@ -21,6 +21,8 @@
 .rail-head button{display:flex;align-items:center;gap:7px;font:10px monospace;color:#9db3a6;padding:4px 0}
 .live-waves{display:block;width:100%;height:74px;margin:10px 0 8px}
 .rail-channels{display:flex;gap:14px}
+.rail-channels.wave-legend{pointer-events:none;margin-bottom:2px}
+.rail-channels.wave-legend span{display:flex;align-items:center;gap:6px;font-size:11px;color:#8b9c92;opacity:.75}
 .rail-channels button{display:flex;align-items:center;gap:6px;font-size:11px;color:#8b9c92;opacity:.5;padding:2px 0}
 .rail-channels button[aria-pressed=true]{opacity:1;color:#dfe8e1}
 .rail-channels i{width:4px;height:4px;border-radius:50%}
